@@ -10,8 +10,8 @@ select.dt <- rbind(
   e("negative", 513, 3))
 some.err <- neuroblastomaProcessed$errors[select.dt, .(
   fp, fn, possible.fp, possible.fn,
-  min.log.lambda=-max.log.lambda,
-  max.log.lambda=-min.log.lambda,
+  min.log.lambda = -max.log.lambda,
+  max.log.lambda = -min.log.lambda,
   errors, labels,
   label
 ), on=list(profile.id, chromosome)]
@@ -53,12 +53,48 @@ png("figure-aum-convexity-profiles.png", 3.5, 2, units="in", res=200)
 print(gg.err)
 dev.off()
 
-dmin <- 3.5
-dmax <- 7.5
+##########
+
 some.err[, fp.diff := c(NA, diff(fp)), by=label]
 some.err[, fn.diff := c(NA, diff(fn)), by=label]
 some.diff <- some.err[fp.diff != 0 | fn.diff != 0, .(
-  id=1, label, fp.diff, fn.diff, pred.log.lambda=min.log.lambda)]
+  id = 1, label, fp.diff, fn.diff, pred.log.lambda = min.log.lambda)]
+#the pred.log.lambda here are the break points (on the horizontal axis)
+some.diff[, slope := ifelse(label == "positive", 1, -1)]
+#pred.log.lamba is v_b
+some.diff[, intercept := pred.log.lambda - ifelse(
+  label == "positive", 0, 7)]
+
+intercept.table <- cj(positive = 1:3, negative = 1:3)
+
+for (label.value in c("positive", "negative")) {
+  some.diff.subset <- some.diff[label == label.value]
+  for (col.name in c("slope", "intercept")) {
+    new.col.name <- paste(label.value, col.name, sep = ".")
+    line.number <- intercept.table[[label.value]]
+    slope.or.intercept.values <- some.diff.subset[[col.name]]
+    new.col.value <- slope.or.intercept.values[line.number]
+    set(intercept.table, j = new.col.name, value = new.col.value)
+  }
+}
+
+intercept.table[, stepsize := (positive.intercept - negative.intercept)
+                /(negative.slope - positive.slope)]
+
+intercept.table[, threshold.value := 
+                  stepsize * positive.slope + positive.intercept]
+
+ggplot() + 
+  geom_abline(aes(
+    slope = slope, 
+    intercept = intercept), 
+    data = some.diff) +
+  geom_point(aes(x = stepsize, y = threshold.value), data = intercept.table)
+
+##########
+
+dmin <- 3.5
+dmax <- 7.5
 some.diff[, fp.cum := cumsum(fp.diff), by=label]
 some.diff[, fn.cum := rev(cumsum(rev(-fn.diff))), by=label]
 dlist <- split(some.diff, some.diff[["label"]])
@@ -211,4 +247,3 @@ dev.off()
 png("figure-aum-convexity.png", 4.2, 3, units="in", res=200)
 print(gg)
 dev.off()
-
